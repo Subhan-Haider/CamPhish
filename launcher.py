@@ -191,7 +191,80 @@ def ensure_git_tools(base_dir):
     input("\nPress Enter to exit...")
     sys.exit(1)
 
+# ── Ensure Cloudflared ────────────────────────────────────────────────────────
+
+CLOUDFLARED_URL = ("https://github.com/cloudflare/cloudflared/releases/latest/"
+                   "download/cloudflared-windows-amd64.exe")
+
+def ensure_cloudflared(script_dir):
+    """
+    Download cloudflared.exe into script_dir if not already there.
+    Python's urllib follows redirects (wget sometimes doesn't on GitHub URLs).
+    """
+    dest = os.path.join(script_dir, "cloudflared.exe")
+    if os.path.isfile(dest) and os.path.getsize(dest) > 1_000_000:
+        print("[+] cloudflared.exe: already present.")
+        return dest
+
+    print("[*] Downloading cloudflared.exe...")
+
+    def _progress(b, bs, total):
+        if total > 0:
+            print(f"\r    {min(b * bs * 100 // total, 100)}%", end="", flush=True)
+
+    try:
+        req = urllib.request.Request(
+            CLOUDFLARED_URL,
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp, \
+             open(dest, "wb") as f:
+            total = int(resp.headers.get("Content-Length", 0))
+            downloaded = 0
+            chunk = 65536
+            while True:
+                data = resp.read(chunk)
+                if not data:
+                    break
+                f.write(data)
+                downloaded += len(data)
+                if total:
+                    pct = min(downloaded * 100 // total, 100)
+                    print(f"\r    {pct}%", end="", flush=True)
+        print("\r    Done.        ")
+        print(f"[+] cloudflared.exe downloaded ({os.path.getsize(dest)//1024} KB)")
+        return dest
+    except Exception as e:
+        print(f"[-] cloudflared download failed: {e}")
+        if os.path.isfile(dest):
+            os.remove(dest)
+        return None
+
 # ── Ensure PHP ────────────────────────────────────────────────────────────────
+
+def _get_latest_php_url():
+    """Scrape windows.php.net/download/ to find the latest NTS x64 zip URL."""
+    import re as _re
+    try:
+        print("[*] Looking up latest PHP version...")
+        req = urllib.request.Request(
+            "https://windows.php.net/download/",
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+        # Find all NTS x64 zip hrefs
+        matches = _re.findall(
+            r'href="(/downloads/releases/php-[\d.]+-nts-Win32-[^"]*x64\.zip)"',
+            html
+        )
+        if matches:
+            url = "https://windows.php.net" + matches[0]
+            print(f"[+] Found PHP download: {url.split('/')[-1]}")
+            return url
+    except Exception as e:
+        print(f"[!] Could not fetch PHP download page: {e}")
+    return None
 
 def ensure_php(base_dir):
     if is_cmd_available("php"):
@@ -203,7 +276,44 @@ def ensure_php(base_dir):
         print("[+] PHP: using bundled copy.")
         return
 
-    print(f"[*] PHP not found. Downloading PHP {PHP_VERSION}...")
+    # ── Try winget first (cleanest install) ──────────────────────────
+    print("[*] PHP not found. Trying winget install...")
+    try:
+        result = subprocess.run(
+            ["winget", "install", "PHP.PHP", "--silent",
+             "--accept-package-agreements", "--accept-source-agreements"],
+            timeout=120, capture_output=True
+        )
+        refresh_path_from_registry()
+        if is_cmd_available("php"):
+            print("[+] PHP installed via winget.")
+            return
+    except Exception:
+        pass
+
+    # ── Try Chocolatey ───────────────────────────────────────────────
+    if shutil.which("choco"):
+        print("[*] Trying choco install php...")
+        try:
+            subprocess.run(["choco", "install", "php", "-y"],
+                           timeout=120, capture_output=True)
+            refresh_path_from_registry()
+            if is_cmd_available("php"):
+                print("[+] PHP installed via Chocolatey.")
+                return
+        except Exception:
+            pass
+
+    # ── Direct download from php.net ─────────────────────────────────
+    php_url = _get_latest_php_url()
+    if not php_url:
+        # Hardcoded fallback candidates (newest first)
+        for ver in ("8.3.21", "8.3.20", "8.3.19", "8.3.15"):
+            candidate = (f"https://windows.php.net/downloads/releases/"
+                         f"php-{ver}-nts-Win32-vs16-x64.zip")
+            php_url = candidate
+            break
+
     php_dir  = os.path.join(base_dir, PHP_DIR_NAME)
     zip_path = os.path.join(base_dir, "_php_tmp.zip")
 
@@ -211,8 +321,9 @@ def ensure_php(base_dir):
         if total > 0:
             print(f"\r    {min(b * bs * 100 // total, 100)}%", end="", flush=True)
 
+    print(f"[*] Downloading PHP...")
     try:
-        urllib.request.urlretrieve(PHP_ZIP_URL, zip_path, reporthook=_progress)
+        urllib.request.urlretrieve(php_url, zip_path, reporthook=_progress)
         print("\r    Done.        ")
         os.makedirs(php_dir, exist_ok=True)
         with zipfile.ZipFile(zip_path, "r") as zf:
@@ -224,20 +335,17 @@ def ensure_php(base_dir):
         print("  HOW TO INSTALL PHP MANUALLY")
         print("━" * 62)
         print()
-        print("  Option 1 — Download from php.net (recommended):")
+        print("  Option 1 — Install via winget (easiest):")
+        print("    Open PowerShell as Administrator and run:")
+        print("      winget install PHP.PHP")
+        print()
+        print("  Option 2 — Install via Chocolatey:")
+        print("      choco install php")
+        print()
+        print("  Option 3 — Download from php.net:")
         print("    1. Open: https://windows.php.net/download/")
         print("    2. Download 'VS16 x64 Non Thread Safe' ZIP")
-        print("    3. Extract to a folder, e.g.:  C:\\php")
-        print("    4. Add that folder to your system PATH:")
-        print("       Start → 'Edit the system environment variables'")
-        print("       → Environment Variables → Path → New → C:\\php")
-        print("    5. Open a new terminal and run: php --version")
-        print()
-        print("  Option 2 — Install via winget:")
-        print("    winget install PHP.PHP")
-        print()
-        print("  Option 3 — Install via Chocolatey:")
-        print("    choco install php")
+        print("    3. Extract to C:\\php and add to PATH")
         print()
         print("  After installing PHP, re-run this program.")
         print("━" * 62)
@@ -349,6 +457,9 @@ def main():
 
     # --- wget / unzip / curl (from Git Bash, or auto-downloaded) ---
     ensure_git_tools(base_dir)
+
+    # --- Cloudflared (pre-download so wget redirect issues don't block it) ---
+    ensure_cloudflared(script_dir)
 
     # --- Bash ---
     bash_cmd = ensure_bash()
