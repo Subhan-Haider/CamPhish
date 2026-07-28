@@ -3,6 +3,7 @@ import sys
 import os
 import urllib.request
 import zipfile
+import shutil
 
 # ── Config ────────────────────────────────────────────────────────────────────
 PHP_VERSION  = "8.3.22"
@@ -40,11 +41,8 @@ def run_silent(cmd, **kwargs):
     return subprocess.run(cmd, capture_output=True, **kwargs)
 
 def is_cmd_available(cmd):
-    try:
-        run_silent([cmd, "--version"], check=True)
-        return True
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return False
+    """Check if a command exists on PATH without running it."""
+    return shutil.which(cmd) is not None
 
 def prepend_path(directory):
     os.environ["PATH"] = directory + os.pathsep + os.environ.get("PATH", "")
@@ -94,34 +92,35 @@ def find_script(base_dir):
 # ── Ensure Git Bash tools (wget, unzip, curl) ────────────────────────────────
 
 # wget standalone download (GNU wget for Windows)
-WGET_URL     = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
-WGET_EXE_IN_ZIP = "wget.exe"   # sits at the root of the zip
+WGET_URL        = "https://eternallybored.org/misc/wget/releases/wget-1.21.4-win64.zip"
+# unzip standalone download (Info-ZIP for Windows)
+UNZIP_URL       = "https://downloads.sourceforge.net/project/gnuwin32/unzip/5.51-1/unzip-5.51-1-bin.zip"
+WGET_EXE_IN_ZIP = "wget.exe"
 
-def download_wget(base_dir):
-    """Download a standalone wget.exe and place it in base_dir."""
-    zip_path = os.path.join(base_dir, "_wget_tmp.zip")
-    print("[*] wget not found. Downloading wget automatically...")
+def _download_exe_from_zip(url, exe_name, dest_dir, label):
+    """Generic: download a zip from url, extract exe_name into dest_dir."""
+    zip_path = os.path.join(dest_dir, f"_{label}_tmp.zip")
+    print(f"[*] {label} not found. Downloading {label} automatically...")
 
     def _progress(b, bs, total):
         if total > 0:
             print(f"\r    {min(b * bs * 100 // total, 100)}%", end="", flush=True)
 
     try:
-        urllib.request.urlretrieve(WGET_URL, zip_path, reporthook=_progress)
+        urllib.request.urlretrieve(url, zip_path, reporthook=_progress)
         print("\r    Done.        ")
         with zipfile.ZipFile(zip_path, "r") as zf:
-            # The zip may contain wget.exe at root or in a subfolder
             for member in zf.namelist():
-                if member.endswith("wget.exe"):
+                if member.lower().endswith(exe_name.lower()):
                     data = zf.read(member)
-                    dest = os.path.join(base_dir, "wget.exe")
+                    dest = os.path.join(dest_dir, exe_name)
                     with open(dest, "wb") as f:
                         f.write(data)
-                    print(f"[+] wget installed to: {dest}")
+                    print(f"[+] {label} installed to: {dest}")
                     return dest
-        print("[-] Could not find wget.exe inside the downloaded zip.")
+        print(f"[-] Could not find {exe_name} inside the downloaded zip.")
     except Exception as e:
-        print(f"[-] wget auto-download failed: {e}")
+        print(f"[-] {label} auto-download failed: {e}")
     finally:
         if os.path.isfile(zip_path):
             os.remove(zip_path)
@@ -133,7 +132,7 @@ def ensure_git_tools(base_dir):
     Priority:
       1. Already on PATH → nothing to do.
       2. Found in Git Bash / MSYS2 dirs → prepend to PATH.
-      3. wget missing → auto-download standalone wget.exe.
+      3. wget or unzip missing → auto-download standalone exe.
     """
     # Refresh PATH from registry (picks up newly installed Git)
     refresh_path_from_registry()
@@ -147,9 +146,16 @@ def ensure_git_tools(base_dir):
     if not still_missing:
         return
 
-    # Auto-fix wget specifically by downloading it
+    # Auto-fix wget by downloading standalone exe
     if "wget" in still_missing:
-        dest = download_wget(base_dir)
+        dest = _download_exe_from_zip(WGET_URL, "wget.exe", base_dir, "wget")
+        if dest:
+            prepend_path(os.path.dirname(dest))
+            still_missing = [t for t in still_missing if not is_cmd_available(t)]
+
+    # Auto-fix unzip by downloading standalone exe
+    if "unzip" in still_missing:
+        dest = _download_exe_from_zip(UNZIP_URL, "unzip.exe", base_dir, "unzip")
         if dest:
             prepend_path(os.path.dirname(dest))
             still_missing = [t for t in still_missing if not is_cmd_available(t)]
