@@ -47,6 +47,13 @@ def is_cmd_available(cmd):
 def prepend_path(directory):
     os.environ["PATH"] = directory + os.pathsep + os.environ.get("PATH", "")
 
+def to_bash_path(win_path):
+    """Convert a Windows path (C:\\foo\\bar) to Git Bash Unix format (/c/foo/bar)."""
+    p = os.path.abspath(win_path).replace("\\", "/")
+    if len(p) >= 2 and p[1] == ":":
+        p = "/" + p[0].lower() + p[2:]
+    return p
+
 def refresh_path_from_registry():
     """
     Read the current system + user PATH from the Windows registry
@@ -349,8 +356,15 @@ def main():
     print()
 
     # --- Run ---
+    # Build a bash-format PATH so wget/unzip/php are visible inside bash
+    bash_extra_dirs = [base_dir, script_dir]
+    bash_path_prefix = ":".join(to_bash_path(d) for d in bash_extra_dirs if os.path.isdir(d))
+    bash_script = to_bash_path(script_path)
+
     try:
-        subprocess.run([bash_cmd, script_path], cwd=script_dir, env=os.environ.copy())
+        # Use bash -c to inject PATH in Unix format before running the script
+        bash_inline = f'export PATH="{bash_path_prefix}:$PATH"; bash "{bash_script}"'
+        subprocess.run([bash_cmd, "-c", bash_inline], cwd=script_dir, env=os.environ.copy())
         input("\nScript finished. Press Enter to exit...")
     except FileNotFoundError as e:
         print(f"\n[-] Could not launch bash: {e}")
