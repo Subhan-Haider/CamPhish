@@ -45,3 +45,12 @@
 {"level":"error","event":1,"connIndex":0,"originService":"http://127.0.0.1:3333","ingressRule":0,"error":"Incoming request ended abruptly: context canceled","time":"2026-07-28T02:06:27Z"}
 {"level":"error","event":0,"ip":"2606:4700:a8::10","connIndex":0,"error":"Incoming request ended abruptly: context canceled","type":"http","dest":"https://beatles-occurred-expressions-grammar.trycloudflare.com/location.php","time":"2026-07-28T02:06:27Z","message":"Request failed"}
 {"level":"error","event":0,"ip":"2606:4700:a8::10","connIndex":0,"error":"Incoming request ended abruptly: context canceled","type":"http","dest":"https://beatles-occurred-expressions-grammar.trycloudflare.com/debug_log.php","time":"2026-07-28T02:06:27Z","message":"Request failed"}
+{"level":"info","time":"2026-07-28T02:23:40Z","message":"Initiating graceful shutdown due to signal terminated ..."}
+{"level":"error","event":0,"ip":"2606:4700:a8::10","connIndex":0,"error":"context canceled","time":"2026-07-28T02:23:40Z","message":"failed to run the datagram handler"}
+{"level":"error","event":0,"ip":"2606:4700:a8::10","connIndex":0,"error":"accept stream listener encountered a failure while serving","time":"2026-07-28T02:23:40Z","message":"failed to serve tunnel connection"}
+{"level":"error","event":0,"ip":"2606:4700:a8::10","connIndex":0,"error":"accept stream listener encountered a failure while serving","time":"2026-07-28T02:23:40Z","message":"Serve tunnel error"}
+{"level":"info","event":0,"ip":"2606:4700:a8::10","connIndex":0,"time":"2026-07-28T02:23:40Z","message":"Retrying connection in up to 1s"}
+{"level":"error","connIndex":0,"time":"2026-07-28T02:23:40Z","message":"Connection terminated"}
+{"level":"error","time":"2026-07-28T02:23:40Z","message":"no more connections active and exiting"}
+{"level":"info","time":"2026-07-28T02:23:40Z","message":"Tunnel server stopped"}
+{"level":"info","time":"2026-07-28T02:23:40Z","message":"Metrics server stopped"}
